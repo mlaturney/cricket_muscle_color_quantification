@@ -1,0 +1,137 @@
+## import modules
+import numpy as np
+import pandas as pd
+import os
+## Enable multiple outputs from jupyter cells
+from IPython.core.interactiveshell import InteractiveShell
+InteractiveShell.ast_node_interactivity = "all"
+## disable the Pandas "setting a copy of a slice" warning
+pd.options.mode.chained_assignment = None
+## set default number of DataFrame rows printed to 6
+pd.set_option('display.max_rows', 10)
+
+# SET UP
+# Make a folder "experiment"
+# this folder must contain:
+### a .csv file containing data about your crickets (eg. ovary mass) called "info"
+### a folder containing the .csv files you created, call it "images_analysis"
+##### the .csv files are in the notion of: id_001.csv
+# set this folder as your working directory
+# os.getcwd()
+# os.chdir('path/experiment')
+
+# Make a dataframe with the .csv files you made during muscle color quantification (long form)
+path = './images_analysis'
+files = [file for file in os.listdir(path) if file.endswith('.csv')]
+files.sort()
+dfs = []
+for file in files:
+    df = pd.read_csv(os.path.join(path, file))
+    dfs.append(df)
+df1 = pd.concat(dfs, ignore_index=True)\
+    .rename(columns={'Mean': 'value', ' ': 'color'})\
+    .drop(columns=['Area','Min','Max'])
+df1.color.replace([1, 2, 3, 4, 5, 6, 7, 8, 9], 
+                 ['blue_1', 'blue_2', 'blue_3', 'green_1', 'green_2', 'green_3',\
+                  'red_1', 'red_2', 'red_3'], 
+                 inplace=True)
+list_a = [s.replace("id_", "").replace(".csv", "").lstrip('0') for s in files]
+
+## Add cricket id to the dataframe
+id_list = [eval(i) for i in list_a]
+## id_list = range(1,(len(files)+1)) #if are continuous from 1 
+k = 9
+cricket_id = []
+for element in id_list:
+    for i in range(k):
+        cricket_id.append(element)
+df1['cricket_id'] = cricket_id
+wide_df1 = pd.pivot(df1, #pivot wide
+                    index   = 'cricket_id',
+                    columns = 'color',
+                    values  = 'value').reset_index()
+wide_df1
+## Make new columns with the means
+wide_df1['mean_b'] = wide_df1[['blue_1','blue_2','blue_3']].mean(axis=1)
+wide_df1['mean_g'] = wide_df1[['green_1','green_2','green_3']].mean(axis=1)
+wide_df1['mean_r'] = wide_df1[['red_1','red_2','red_3']].mean(axis=1)
+wide_df1.drop(['blue_1','blue_2','blue_3','green_1','green_2','green_3',\
+               'red_1','red_2','red_3'], axis=1, inplace=True)
+long_df1 = pd.melt(wide_df1, id_vars=['cricket_id'], 
+                    value_vars=['mean_g', 'mean_b', 'mean_r'], 
+                    var_name='color', 
+                    value_name='value')
+
+# Import other info and merge with long_df1
+df2 = pd.read_csv('info.csv')
+merged_df = pd.merge(long_df1, df2, on='cricket_id', how='outer')
+
+# Run this cell if you want to export the dataframe to a .csv file and analysis with other software
+merged_wide_df = pd.merge(wide_df1, df2, on='cricket_id', how='outer')
+merged_wide_df.to_csv('file_name.csv', index=False)
+
+# Look at your continuous variables based on the categorical variable identifiers
+# make some new objects
+cont_var = ['adult_mass','ovary_mass','age'] #change names based on the column names of the continuous variables in your dataframe
+cat_var = ['condition','muscle_color','morph','funct']#change names based on the column names of the categorical variables in your dataframe
+
+def create_pivot_tables(df, index_col, value_cols, pivot_col):
+    """
+    Generates pivot tables for each value column in a DataFrame.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        index_col (str): Column to use as index for pivot tables.
+        value_cols (list): List of columns to use as values.
+        pivot_col (str): Column to pivot.
+    """
+    for value_col in value_cols:
+        pivot_table = pd.pivot_table(df, index=index_col, columns=pivot_col, 
+                                     values=value_col, aggfunc='mean')
+        print(f"Pivot Table for {value_col}:")
+        print(pivot_table)
+        print("\n")
+        
+# categorical dependent variable (funct, color, morph) with continuous variables (delta mass, total intake, ovary mass)
+
+index_column = 'muscle_color'
+value_columns = cont_var
+pivot_column = 'condition','morph','funct'
+
+create_pivot_tables(lw_df, index_column, value_columns, pivot_column)
+
+# Look at your continuous variables based on the categorical variable identifiers
+# create a boxplot
+sns.boxplot(data=df, 
+            x='condition', 
+            y='blue_channel',
+            hue='morph',
+            color='white',
+            fliersize = 3,
+            linewidth = 1.2,
+            width = 0.7,
+           showfliers=False)
+
+# create a strip plot
+sns.stripplot(data=lw_df, 
+            x='condition', 
+            y='blue_channel',
+            hue = 'morph', jitter=True,dodge=True,
+            palette='Set2')
+
+# add descriptive texts
+plt.title('Blue channel value (muscle color) of crickets according to condition and morph', fontsize=12)
+plt.xlabel('condition')
+plt.ylabel('blue channel value')
+
+# Look at your categorical output variable (funct) with categorical variables
+# create a crosstab
+
+for col in cat_var:
+        cross_table = pd.crosstab(lw_df["funct"], lw_df[col])
+        print(f"Crosstab for {col}:")
+        print(cross_table)
+        print("\n")
+
+# continuous output variable with continuous variables
+sns.scatterplot(data=df, x='blue_value', y='ovary_mass', hue='condition', style='morph')
